@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMR Master - Bank Job Prep</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS for Excel Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Chart.js for Stats -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        omr: {
+                            base: '#164e63',   /* Cyan 900 - Body Background */
+                            dark: '#083344',   /* Cyan 950 - Panels/Header */
+                            sidebar: '#0e3c4e', /* Slightly darker than base, lighter than dark */
+                            light: '#155e75',  /* Cyan 800 - Borders/Accents */
+                            text: '#cffafe',   /* Cyan 100 - Text */
+                            muted: '#67e8f9',  /* Cyan 300 - Muted Text */
+                            bubble: '#22d3ee', /* Cyan 400 - Bubble Border */
+                            hover: '#1e293b',  /* Dark slate for hover states */
+                        }
+                    },
+                    animation: {
+                        'glow-pulse': 'glow-pulse 2s infinite',
+                    },
+                    keyframes: {
+                        'glow-pulse': {
+                            '0%, 100%': { opacity: '1' },
+                            '50%': { opacity: '0.8' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', 'Hind Siliguri', sans-serif;
+            background-color: #164e63; /* Matches uploaded file background */
+            color: #ecfeff;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: row; /* Changed to row for Sidebar */
+        }
+
+        /* Custom Scrollbar for Teal Theme */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #083344; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #155e75; 
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #22d3ee; 
+        }
+
+        /* Compact OMR Bubble Styling */
+        .bubble {
+            width: 24px;  
+            height: 24px;
+            border: 2px solid #586e75; /* Muted Slate/Cyan */
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+            color: #94a3b8;
+            transition: all 0.1s ease;
+            user-select: none;
+            background-color: #0f172a; /* Dark inside */
+        }
+
+        .bubble:hover {
+            border-color: #22d3ee; /* Cyan 400 */
+            color: #22d3ee;
+            background-color: rgba(34, 211, 238, 0.1);
+            transform: scale(1.1);
+        }
+
+        .bubble.filled {
+            background-color: #083344; /* Dark Cyan fill */
+            border-color: #000;
+            color: #fff;
+            box-shadow: inset 0 0 0 6px #000; /* Mimic pen fill */
+        }
+
+        /* States for checked answers */
+        .bubble.correct {
+            background-color: #10b981 !important; /* Emerald 500 */
+            border-color: #10b981 !important;
+            color: white !important;
+            box-shadow: none !important;
+        }
+
+        .bubble.wrong {
+            background-color: #ef4444 !important; /* Red 500 */
+            border-color: #ef4444 !important;
+            color: white !important;
+            box-shadow: none !important;
+        }
+
+        /* Key Setting Mode Visuals */
+        .bubble.key-filled {
+            border-color: #f59e0b; /* Amber 500 */
+            color: #f59e0b;
+            background-color: rgba(245, 158, 11, 0.15);
+            box-shadow: 0 0 0 1px #f59e0b;
+        }
+
+        /* Layout Structure */
+        #app-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            height: 100%;
+        }
+
+        #main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        /* Page Views */
+        #exams-page, #stats-page {
+            display: none; 
+            flex: 1;
+            flex-direction: column;
+            background-color: #0f172a; /* Dark slate */
+            overflow: hidden;
+            padding: 20px;
+        }
+
+        #omr-panel {
+            width: 40%;
+            min-width: 320px;
+            background-color: #083344; /* Darker panel */
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #155e75;
+            z-index: 10;
+        }
+
+        #resizer {
+            width: 6px;
+            cursor: col-resize;
+            background-color: #164e63;
+            border-left: 1px solid #155e75;
+            border-right: 1px solid #155e75;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #resizer:hover {
+            background-color: #22d3ee;
+        }
+
+        #pdf-wrapper {
+            flex: 1;
+            background-color: #1e293b; /* Keep dark for PDF contrast */
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Grid Layout */
+        .omr-grid {
+            display: grid;
+            grid-template-columns: 35px repeat(5, 1fr); /* Tighter spacing */
+            gap: 6px;
+            align-items: center;
+            padding: 6px 12px;
+            border-bottom: 1px solid #155e75;
+        }
+        
+        .omr-grid:last-child {
+            border-bottom: none;
+        }
+
+        .omr-grid:hover {
+            background-color: #164e63;
+        }
+
+        .q-num {
+            font-weight: 700;
+            color: #67e8f9; /* Cyan 300 */
+            text-align: right;
+            padding-right: 8px;
+            font-size: 0.85rem;
+        }
+
+        /* Stats Bar */
+        .stat-box {
+            background: #164e63;
+            border: 1px solid #155e75;
+            border-radius: 6px;
+            padding: 0.4rem;
+            text-align: center;
+            position: relative;
+        }
+        .stat-label {
+            font-size: 0.65rem;
+            color: #a5f3fc; /* Cyan 200 */
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 2px;
+        }
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        /* Sidebar Styling */
+        .sidebar-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 12px 0;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar-item:hover {
+            color: #22d3ee;
+            background-color: rgba(0,0,0,0.2);
+        }
+        .sidebar-item.active {
+            color: #22d3ee;
+            border-left-color: #22d3ee;
+            background-color: rgba(0,0,0,0.3);
+        }
+        .sidebar-icon {
+            font-size: 1.25rem;
+            margin-bottom: 4px;
+        }
+        .sidebar-text {
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.025em;
+        }
+        
+        /* Custom Toggle Switch for Toolbar */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #10b981;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #10b981;
+        }
+
+        /* Mode Badge Glow Effects */
+        .mode-glow-red {
+            box-shadow: 0 0 8px rgba(248, 113, 113, 0.6), 0 0 15px rgba(248, 113, 113, 0.3);
+            animation: glow-pulse 2s infinite;
+        }
+        .mode-glow-yellow {
+            box-shadow: 0 0 8px rgba(250, 204, 21, 0.6), 0 0 15px rgba(250, 204, 21, 0.3);
+            animation: glow-pulse 2s infinite;
+        }
+        .mode-no-glow {
+            box-shadow: none;
+        }
+        
+        /* Timer Input Styling */
+        #timer-input::-webkit-inner-spin-button, 
+        #timer-input::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+
+        /* Modal Transitions */
+        .modal {
+            transition: opacity 0.25s ease;
+        }
+        body.modal-active {
+            overflow-x: hidden;
+            overflow-y: hidden !important;
+        }
+
+        /* Table Styling */
+        .history-table th {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            padding: 0.75rem 1rem;
+        }
+        .history-table td {
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            border-bottom: 1px solid #1e293b;
+        }
+        .history-table tr:hover {
+            background-color: #1e293b;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="w-16 bg-omr-sidebar flex flex-col items-center py-4 border-r border-omr-light z-40 shrink-0 shadow-xl">
+        <!-- Brand Icon -->
+        <div class="mb-6 w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg">
+            <i class="fa-solid fa-check-double text-lg"></i>
+        </div>
+
+        <!-- Nav Items -->
+        <div class="flex-1 w-full flex flex-col gap-1">
+            <div id="nav-home" class="sidebar-item active" onclick="switchTab('home')" title="Dashboard">
+                <i class="fa-solid fa-layer-group sidebar-icon"></i>
+                <span class="sidebar-text">HOME</span>
+            </div>
+            <div id="nav-exams" class="sidebar-item" onclick="switchTab('exams')" title="My Exams">
+                <i class="fa-solid fa-file-pen sidebar-icon"></i>
+                <span class="sidebar-text">EXAMS</span>
+            </div>
+            <div id="nav-stats" class="sidebar-item" onclick="switchTab('stats')" title="Analysis">
+                <i class="fa-solid fa-chart-pie sidebar-icon"></i>
+                <span class="sidebar-text">STATS</span>
+            </div>
+        </div>
+
+        <!-- Bottom Items -->
+        <div class="w-full flex flex-col gap-1 mt-auto">
+            <div class="sidebar-item" onclick="openSettings()" title="Settings">
+                <i class="fa-solid fa-gear sidebar-icon"></i>
+            </div>
+            <div class="sidebar-item" title="User Profile">
+                <div class="w-8 h-8 rounded-full bg-cyan-800 border-2 border-cyan-600 flex items-center justify-center text-xs font-bold text-white">
+                    JD
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN APP CONTENT -->
+    <div id="app-content">
+        <!-- Header / Toolbar (Shared) -->
+        <header class="h-16 bg-omr-dark border-b border-omr-light flex items-center justify-between px-6 shrink-0 shadow-md z-30">
+            <!-- Left: Title -->
+            <div class="flex flex-col justify-center">
+                <h1 class="text-xl font-bold text-white tracking-tight leading-none">OMR Master</h1>
+                <div class="flex items-center gap-2 mt-1">
+                    <!-- MODE INDICATOR -->
+                    <span id="mode-badge" class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold tracking-wider transition-all duration-300 mode-no-glow bg-cyan-900 text-cyan-300 border-cyan-700">
+                        Mode: Student
+                    </span>
+                    <span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-px rounded border border-slate-700 uppercase font-semibold tracking-wider">Prelims</span>
+                </div>
+            </div>
+
+            <!-- Right: Controls -->
+            <div class="flex items-center gap-4">
+                <!-- Timer Section -->
+                <div class="flex items-center gap-3 bg-omr-base px-3 py-1.5 rounded-full border border-omr-light shadow-inner">
+                    <!-- Timer Input -->
+                    <div class="flex items-center gap-0.5 border-r border-cyan-800 pr-3 mr-1">
+                         <input type="number" id="timer-input" placeholder="Min" class="w-9 bg-cyan-900/50 text-cyan-300 text-[10px] font-bold text-center border border-cyan-600 rounded-l focus:ring-1 focus:ring-cyan-500 focus:outline-none placeholder-cyan-700 py-0.5 h-7" min="1" max="180">
+                         <div class="flex flex-col">
+                            <button onclick="adjustTime(1)" class="w-4 h-3.5 bg-cyan-800 hover:bg-cyan-700 text-cyan-300 text-[6px] flex items-center justify-center rounded-tr border-t border-r border-cyan-600 transition">
+                                <i class="fa-solid fa-chevron-up"></i>
+                            </button>
+                            <button onclick="adjustTime(-1)" class="w-4 h-3.5 bg-cyan-800 hover:bg-cyan-700 text-cyan-300 text-[6px] flex items-center justify-center rounded-br border-b border-r border-b-cyan-600 border-r-cyan-600 border-t border-t-cyan-900 transition">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </button>
+                         </div>
+                    </div>
+
+                    <div class="flex flex-col items-start leading-none">
+                        <span class="text-[8px] text-cyan-400 uppercase font-bold tracking-wider">Time</span>
+                        <span id="timer-display" class="font-mono text-xl text-white font-medium tracking-widest">00:00:00</span>
+                    </div>
+                    
+                    <div class="flex items-center gap-1">
+                        <button id="timer-btn" class="w-8 h-8 rounded-full bg-cyan-700 hover:bg-cyan-600 text-white flex items-center justify-center transition border border-cyan-600 shadow-sm" onclick="toggleTimer()" title="Start/Pause">
+                            <i class="fa-solid fa-play text-xs pl-0.5"></i>
+                        </button>
+                        <!-- Timer Reset Button -->
+                        <button id="timer-reset-btn" onclick="resetTimer()" class="w-6 h-6 rounded-full bg-cyan-900/40 hover:bg-cyan-800 text-cyan-400 hover:text-white flex items-center justify-center transition border border-cyan-800" title="Reset Timer Only">
+                             <i class="fa-solid fa-arrow-rotate-left text-[10px]"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Vertical Divider -->
+                <div class="h-8 w-px bg-omr-light mx-1"></div>
+
+                <!-- Action Buttons -->
+                <div class="flex items-center gap-2">
+                    <!-- Key Mode Switch -->
+                    <label id="key-mode-label" class="flex items-center gap-2 cursor-pointer bg-omr-base pl-3 pr-1 py-1 rounded-full border border-omr-light hover:bg-cyan-900/50 transition select-none group h-9" title="Toggle Answer Key Mode">
+                        <span class="text-xs font-bold text-cyan-400 group-hover:text-cyan-300 uppercase mr-1">Key</span>
+                        <div class="relative">
+                            <input type="checkbox" id="key-mode-toggle" class="sr-only peer">
+                            <div class="w-9 h-5 bg-cyan-900 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                        </div>
+                    </label>
+
+                    <!-- Reset Sheet Button -->
+                    <button id="reset-btn" onclick="window.resetSheet()" class="h-9 w-9 rounded-full bg-rose-900/40 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-800 hover:border-rose-500 flex items-center justify-center transition disabled:opacity-50 disabled:cursor-not-allowed" title="Reset Everything">
+                        <i class="fa-solid fa-rotate-right text-sm"></i>
+                    </button>
+                    
+                    <!-- Submit Button -->
+                    <button id="submit-btn" onclick="handleSubmit()" class="ml-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white px-5 h-9 rounded-full text-xs font-bold shadow-lg shadow-emerald-900/40 transition border border-emerald-500 flex items-center gap-2">
+                        <span>SUBMIT</span>
+                        <i class="fa-solid fa-paper-plane text-[10px]"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- INFO BAR (Only visible in HOME view) -->
+        <div id="info-bar" class="h-10 bg-slate-900 border-b border-cyan-900 flex items-center justify-between px-6 shrink-0 text-[10px] font-medium text-cyan-500 z-20 shadow-sm">
+            <div class="flex items-center gap-4">
+                <!-- Topic Input -->
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square text-cyan-700"></i>
+                    <div class="flex items-center gap-2">
+                        <span class="uppercase tracking-wider font-bold text-cyan-600">Topic:</span>
+                        <input type="text" id="topic-input" placeholder="Enter Exam Topic..." class="bg-cyan-900/20 border border-cyan-800/50 rounded px-2 py-1 text-cyan-300 placeholder-cyan-800 focus:outline-none focus:border-cyan-500 focus:bg-cyan-900/40 w-48 transition-all">
+                    </div>
+                </div>
+
+                <div class="h-4 w-px bg-cyan-800/50"></div>
+
+                <!-- Subject Dropdown -->
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-book-open text-cyan-700"></i>
+                    <div class="flex items-center gap-2">
+                        <span class="uppercase tracking-wider font-bold text-cyan-600">Subject:</span>
+                        <div class="relative group">
+                            <select id="subject-select" class="appearance-none bg-cyan-900/20 border border-cyan-800/50 rounded pl-2 pr-6 py-1 text-cyan-300 focus:outline-none focus:border-cyan-500 focus:bg-cyan-900/40 cursor-pointer min-w-[180px] transition-all">
+                                <option value="" disabled selected>Select Subject</option>
+                                <option>বাংলা ভাষা ও সাহিত্য</option>
+                                <option>English Language and Literature</option>
+                                <option>বাংলাদেশ বিষয়াবলি</option>
+                                <option>আন্তর্জাতিক বিষয়াবলি</option>
+                                <option>ভূগোল, পরিবেশ ও দুর্যোগ ব্যবস্থাপনা</option>
+                                <option>সাধারণ বিজ্ঞান</option>
+                                <option>কম্পিউটার ও তথ্য প্রযুক্তি</option>
+                                <option>গাণিতিক যুক্তি</option>
+                                <option>মানসিক দক্ষতা</option>
+                                <option>নৈতিকতা, মূল্যবোধ ও সুশাসন</option>
+                                <option>General Mathematics & Quantitative Skills</option>
+                                <option>General Knowledge</option>
+                                <option>Basic Computer Knowledge</option>
+                            </select>
+                            <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-cyan-600 group-hover:text-cyan-400">
+                                <i class="fa-solid fa-chevron-down text-[8px]"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-5">
+                <div class="flex items-center gap-2">
+                    <i class="fa-regular fa-calendar text-cyan-700"></i>
+                    <span id="current-date" class="font-mono text-cyan-400 text-xs">--/--/----</span>
+                </div>
+                <div class="h-3 w-px bg-cyan-800/50"></div>
+                <div class="flex items-center gap-2 text-emerald-500 bg-emerald-900/10 px-2 py-0.5 rounded-full border border-emerald-900/30">
+                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span class="uppercase tracking-wide font-bold text-[9px]">Live</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- WORKSPACE AREA -->
+        
+        <!-- 1. HOME: OMR & PDF Container -->
+        <div id="main-container">
+            
+            <!-- LEFT PANEL: OMR Sheet -->
+            <div id="omr-panel">
+                <!-- Toolbar for OMR settings -->
+                <div class="p-2 bg-omr-dark border-b border-omr-light flex justify-between items-center text-xs font-medium shadow-sm">
+                    <div class="flex gap-2 items-center">
+                       <div class="flex items-center gap-2 bg-omr-base px-2 py-1 rounded border border-omr-light">
+                           <label class="text-cyan-400">Total Qs:</label>
+                           <input type="number" id="q-count" value="80" class="w-10 bg-transparent text-white text-center focus:outline-none font-bold" onchange="generateGrid()">
+                       </div>
+                    </div>
+                    <div class="flex gap-2 items-center">
+                        <div class="flex items-center gap-2 bg-omr-base px-2 py-1 rounded border border-omr-light">
+                            <label class="text-cyan-400">Neg. Mark:</label>
+                            <select id="neg-mark" class="bg-transparent text-white focus:outline-none cursor-pointer font-bold">
+                                <option value="0">0.00</option>
+                                <option value="0.25" selected>0.25</option>
+                                <option value="0.50">0.50</option>
+                                <option value="1">1.00</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Questions Grid -->
+                <div id="omr-grid-container" class="flex-1 overflow-y-auto p-0 bg-omr-dark scroll-smooth">
+                    <!-- Grid Injected via JS -->
+                </div>
+
+                <!-- Score Footer -->
+                <div class="bg-omr-dark border-t border-omr-light p-3 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.3)] z-20">
+                    <div class="grid grid-cols-5 gap-2">
+                        <div class="stat-box border-emerald-500/30">
+                            <div class="stat-label text-emerald-400">Correct</div>
+                            <input type="text" id="score-right" readonly class="w-full bg-transparent text-center font-bold text-emerald-400 text-lg border-none focus:ring-0 p-0" value="-">
+                        </div>
+                        <div class="stat-box border-rose-500/30">
+                            <div class="stat-label text-rose-400">Wrong</div>
+                            <input type="text" id="score-wrong" readonly class="w-full bg-transparent text-center font-bold text-rose-400 text-lg border-none focus:ring-0 p-0" value="-">
+                        </div>
+                         <div class="stat-box border-amber-500/30">
+                            <div class="stat-label text-amber-400">Negative</div>
+                            <input type="text" id="score-neg" readonly class="w-full bg-transparent text-center font-bold text-amber-400 text-lg border-none focus:ring-0 p-0" value="-">
+                        </div>
+                        <div class="stat-box bg-gradient-to-b from-cyan-900 to-cyan-950 border-cyan-500/50">
+                            <div class="stat-label text-white">Score</div>
+                            <input type="text" id="score-obtained" readonly class="w-full bg-transparent text-center font-bold text-white text-xl border-none focus:ring-0 p-0" value="-">
+                        </div>
+                        <div class="stat-box border-purple-500/30">
+                            <div class="stat-label text-purple-400">Remarks</div>
+                            <input type="text" id="score-remarks" readonly class="w-full bg-transparent text-center font-bold text-[10px] text-slate-400 border-none focus:ring-0 p-0 leading-tight" value="-">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resizer Handle -->
+            <div id="resizer" title="Drag to resize">
+                <div class="w-1 h-8 bg-cyan-700 rounded-full opacity-60"></div>
+            </div>
+
+            <!-- RIGHT PANEL: PDF Viewer -->
+            <div id="pdf-wrapper">
+                <div class="bg-slate-800 p-2 flex items-center justify-between border-b border-slate-700 shadow-sm z-10 h-10">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2 flex items-center gap-2">
+                        <i class="fa-regular fa-file-pdf"></i> Question Paper
+                    </span>
+                    <div class="flex gap-1">
+                        <input type="text" id="pdf-url-input" placeholder="Paste PDF URL..." class="bg-slate-900 text-[10px] text-slate-300 px-2 py-0.5 rounded border border-slate-600 w-40 focus:outline-none focus:border-cyan-500 transition">
+                        <button onclick="loadPdf()" class="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-2 py-0.5 rounded font-medium transition border border-slate-600">Load</button>
+                        <button onclick="document.getElementById('file-upload').click()" class="bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] px-2 py-0.5 rounded font-medium transition flex items-center gap-1 border border-cyan-600">
+                            Upload
+                        </button>
+                        <input type="file" id="file-upload" accept="application/pdf" class="hidden" onchange="handleFileUpload(this)">
+                    </div>
+                </div>
+                
+                <div class="flex-1 relative flex flex-col items-center justify-center text-slate-500 bg-slate-900">
+                    <iframe id="pdf-frame" src="" class="hidden w-full h-full border-none"></iframe>
+                    <div id="pdf-placeholder" class="text-center p-10">
+                        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-800 mb-4 text-slate-600 shadow-inner">
+                            <i class="fa-solid fa-file-arrow-up text-3xl"></i>
+                        </div>
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide">No PDF Loaded</h3>
+                        <p class="text-xs opacity-50 mt-2 max-w-xs mx-auto leading-relaxed">
+                            Drag the resize bar to adjust width.<br>Upload a question paper to practice.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. EXAMS: History Page -->
+        <div id="exams-page">
+            <!-- Header with Filters -->
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-white tracking-tight flex items-center gap-3">
+                        <div class="w-8 h-8 rounded bg-cyan-700 flex items-center justify-center shadow-lg">
+                            <i class="fa-solid fa-clock-rotate-left text-sm text-cyan-200"></i>
+                        </div>
+                        Exam History
+                    </h2>
+                    <p class="text-xs text-cyan-500 mt-1 ml-11">Review your past performance logs.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="relative group">
+                        <select id="history-subject-filter" onchange="renderHistory()" class="appearance-none bg-slate-800 border border-slate-600 rounded pl-3 pr-8 py-2 text-sm text-cyan-300 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-900 cursor-pointer min-w-[220px]">
+                            <option value="All">All Subjects</option>
+                            <option>বাংলা ভাষা ও সাহিত্য</option>
+                            <option>English Language and Literature</option>
+                            <option>বাংলাদেশ বিষয়াবলি</option>
+                            <option>আন্তর্জাতিক বিষয়াবলি</option>
+                            <option>ভূগোল, পরিবেশ ও দুর্যোগ ব্যবস্থাপনা</option>
+                            <option>সাধারণ বিজ্ঞান</option>
+                            <option>কম্পিউটার ও তথ্য প্রযুক্তি</option>
+                            <option>গাণিতিক যুক্তি</option>
+                            <option>মানসিক দক্ষতা</option>
+                            <option>নৈতিকতা, মূল্যবোধ ও সুশাসন</option>
+                            <option>General Mathematics & Quantitative Skills</option>
+                            <option>General Knowledge</option>
+                            <option>Basic Computer Knowledge</option>
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-cyan-600">
+                            <i class="fa-solid fa-filter text-xs"></i>
+                        </div>
+                    </div>
+                    <button onclick="exportHistoryToExcel()" class="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded text-sm font-bold shadow-lg shadow-emerald-900/40 transition flex items-center gap-2 border border-emerald-600">
+                        <i class="fa-solid fa-file-export"></i> Export History
+                    </button>
+                </div>
+            </div>
+
+            <!-- History Table -->
+            <div class="flex-1 overflow-auto bg-slate-800/50 rounded-lg border border-slate-700 shadow-inner custom-scroll">
+                <table class="w-full text-left history-table text-cyan-100">
+                    <thead class="bg-slate-900 text-cyan-400 border-b border-slate-700 sticky top-0 shadow-md">
+                        <tr>
+                            <th>Date</th>
+                            <th>Subject</th>
+                            <th>Topic</th>
+                            <th>Duration</th>
+                            <th>Total Qs</th>
+                            <th>Score</th>
+                            <th>Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body" class="divide-y divide-slate-700/50">
+                        <!-- Rows injected via JS -->
+                    </tbody>
+                </table>
+                
+                <!-- Empty State -->
+                <div id="history-empty" class="hidden flex flex-col items-center justify-center h-64 text-slate-500">
+                    <i class="fa-regular fa-folder-open text-4xl mb-3 opacity-50"></i>
+                    <p class="text-sm">No exam records found for this subject.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. STATS: Statistics Page -->
+        <div id="stats-page">
+            <h2 class="text-2xl font-bold text-white tracking-tight flex items-center gap-3 mb-6">
+                <div class="w-8 h-8 rounded bg-cyan-700 flex items-center justify-center shadow-lg">
+                    <i class="fa-solid fa-chart-line text-sm text-cyan-200"></i>
+                </div>
+                Performance Statistics
+            </h2>
+            
+            <div class="flex-1 overflow-y-auto custom-scroll pr-2">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <!-- Overall Chart with Detailed Stats -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-lg flex flex-col min-h-[28rem]">
+                        <h3 class="text-sm font-bold text-cyan-400 uppercase tracking-wider mb-4">Overall Progress Curve</h3>
+                        
+                        <!-- Detailed Stats Grid -->
+                        <div class="grid grid-cols-3 gap-2 mb-4">
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Total Ques</div>
+                                <div id="ov-stat-total-qs" class="text-lg font-bold text-white">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Attempted</div>
+                                <div id="ov-stat-attempted" class="text-lg font-bold text-blue-400">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Right Answer</div>
+                                <div id="ov-stat-right" class="text-lg font-bold text-emerald-400">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Wrong Answer</div>
+                                <div id="ov-stat-wrong" class="text-lg font-bold text-rose-400">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Total Exam</div>
+                                <div id="ov-stat-total-exam" class="text-lg font-bold text-white">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Global Avg Score</div>
+                                <div id="ov-stat-avg-score" class="text-lg font-bold text-amber-400">-</div>
+                            </div>
+                        </div>
+
+                        <div class="relative w-full flex-1 min-h-[200px]">
+                            <canvas id="chart-overall"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Subject Chart with Detailed Stats -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-lg flex flex-col min-h-[28rem]">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-cyan-400 uppercase tracking-wider">Subject-wise Progress</h3>
+                            <select id="stats-subject-filter" onchange="updateSubjectChart()" class="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-cyan-300 focus:outline-none focus:border-cyan-500 max-w-[180px]">
+                                <option value="" disabled selected>Select Subject</option>
+                                <option>বাংলা ভাষা ও সাহিত্য</option>
+                                <option>English Language and Literature</option>
+                                <option>বাংলাদেশ বিষয়াবলি</option>
+                                <option>আন্তর্জাতিক বিষয়াবলি</option>
+                                <option>ভূগোল, পরিবেশ ও দুর্যোগ ব্যবস্থাপনা</option>
+                                <option>সাধারণ বিজ্ঞান</option>
+                                <option>কম্পিউটার ও তথ্য প্রযুক্তি</option>
+                                <option>গাণিতিক যুক্তি</option>
+                                <option>মানসিক দক্ষতা</option>
+                                <option>নৈতিকতা, মূল্যবোধ ও সুশাসন</option>
+                                <option>General Mathematics & Quantitative Skills</option>
+                                <option>General Knowledge</option>
+                                <option>Basic Computer Knowledge</option>
+                            </select>
+                        </div>
+
+                        <!-- Detailed Stats Grid -->
+                        <div class="grid grid-cols-4 gap-2 mb-4">
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Total Ques</div>
+                                <div id="stat-total-qs" class="text-lg font-bold text-white">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Attempted</div>
+                                <div id="stat-attempted" class="text-lg font-bold text-blue-400">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Right Answer</div>
+                                <div id="stat-right" class="text-lg font-bold text-emerald-400">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Wrong Answer</div>
+                                <div id="stat-wrong" class="text-lg font-bold text-rose-400">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Total Exam</div>
+                                <div id="stat-total-exam" class="text-lg font-bold text-white">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Average Score</div>
+                                <div id="stat-avg-score" class="text-lg font-bold text-amber-400">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Highest Score</div>
+                                <div id="stat-high-score" class="text-lg font-bold text-purple-400">-</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-slate-400 uppercase font-semibold">Last Attempt Score</div>
+                                <div id="stat-last-attempt" class="text-lg font-bold text-cyan-400">-</div>
+                            </div>
+                        </div>
+
+                        <div class="relative w-full flex-1 min-h-[200px]">
+                            <canvas id="chart-subject"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="fixed inset-0 z-50 hidden opacity-0 pointer-events-none modal">
+        <div class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onclick="closeSettings()"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[400px] bg-omr-dark border border-omr-light shadow-2xl rounded-lg p-6">
+            <h2 class="text-white font-bold text-lg mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-gear text-cyan-400"></i> Settings
+            </h2>
+            
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-cyan-400 uppercase mb-1">Google Apps Script URL (Web App)</label>
+                <input type="text" id="gscript-url" placeholder="https://script.google.com/macros/s/..." class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 transition">
+                <p class="text-[10px] text-slate-400 mt-1">
+                    Required to save data to your "OMR_Progerss_Report" sheet. 
+                    <a href="#" class="text-cyan-500 hover:underline" onclick="showNotification('Info', 'Create a Google Apps Script in your Sheet -> Paste a doPOST function -> Deploy as Web App -> Paste URL here.', 'info')">Help?</a>
+                </p>
+            </div>
+            
+             <div class="mb-6">
+                <label class="block text-xs font-bold text-cyan-400 uppercase mb-1">Target Sheet Name (Optional)</label>
+                <input type="text" id="gsheet-name" value="Sheet1" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 transition">
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <button onclick="closeSettings()" class="px-4 py-2 rounded text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition">Cancel</button>
+                <button onclick="saveSettings()" class="px-4 py-2 rounded text-sm font-bold bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg transition">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION TOAST (NO BUTTON) -->
+    <div id="toast" class="fixed bottom-5 right-5 transform translate-y-24 opacity-0 transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1) z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-2xl border-l-4 bg-slate-800 w-80 pointer-events-none">
+        <div id="toast-icon" class="text-xl"></div>
+        <div class="flex-1">
+            <h4 id="toast-title" class="font-bold text-sm"></h4>
+            <p id="toast-message" class="text-xs text-slate-300 mt-0.5"></p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // --- State Management ---
+        const state = {
+            totalQuestions: 80,
+            userAnswers: {},  // { qIndex: 'optionIndex' (0-4) }
+            answerKey: {},    // { qIndex: 'optionIndex' (0-4) }
+            isKeyMode: false,
+            timerInterval: null,
+            seconds: 0,
+            timeElapsed: 0, // Track actual time spent
+            isTimerRunning: false,
+            isCountdown: false, // Track if we are in countdown mode
+            isSaved: false, // Track if current session is saved
+            options: ['A', 'B', 'C', 'D', 'E'],
+            gScriptUrl: localStorage.getItem('omr_gscript_url') || '',
+            gSheetName: localStorage.getItem('omr_gsheet_name') || 'Sheet1',
+            // Load history from localStorage (Primary Source)
+            examHistory: JSON.parse(localStorage.getItem('omr_exam_history') || '[]'),
+            charts: {} // Store chart instances
+        };
+
+        // --- DOM Elements ---
+        const gridContainer = document.getElementById('omr-grid-container');
+        const keyModeToggle = document.getElementById('key-mode-toggle');
+        const qCountInput = document.getElementById('q-count');
+        const modeBadge = document.getElementById('mode-badge');
+
+        // --- Initialization ---
+        window.onload = () => {
+            generateGrid();
+            setupResizer();
+            setupKeyMode();
+            updateModeDisplay(); // Initial mode check
+            
+            // Set Date in Info Bar
+            const now = new Date();
+            document.getElementById('current-date').textContent = now.toLocaleDateString('en-GB', { 
+                day: '2-digit', month: 'short', year: 'numeric' 
+            });
+
+            // Initialize Settings Inputs
+            document.getElementById('gscript-url').value = state.gScriptUrl;
+            document.getElementById('gsheet-name').value = state.gSheetName;
+        };
+
+        // --- Notification System ---
+        let toastTimeout;
+        function showNotification(title, message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const iconEl = document.getElementById('toast-icon');
+            const titleEl = document.getElementById('toast-title');
+            const msgEl = document.getElementById('toast-message');
+
+            // Set Content
+            titleEl.textContent = title;
+            msgEl.textContent = message;
+
+            // Define Styles based on type
+            let borderClass = 'border-cyan-500';
+            let iconHtml = '<i class="fa-solid fa-circle-info"></i>';
+            let iconColor = 'text-cyan-400';
+            let titleColor = 'text-cyan-400';
+
+            if (type === 'success') {
+                borderClass = 'border-emerald-500';
+                iconHtml = '<i class="fa-solid fa-circle-check"></i>';
+                iconColor = 'text-emerald-400';
+                titleColor = 'text-emerald-400';
+            } else if (type === 'error') {
+                borderClass = 'border-rose-500';
+                iconHtml = '<i class="fa-solid fa-circle-exclamation"></i>';
+                iconColor = 'text-rose-400';
+                titleColor = 'text-rose-400';
+            }
+
+            // Update Visuals
+            iconEl.innerHTML = iconHtml;
+            iconEl.className = `text-xl ${iconColor}`;
+            titleEl.className = `font-bold text-sm ${titleColor}`;
+
+            // Reset Borders
+            toast.classList.remove('border-emerald-500', 'border-rose-500', 'border-cyan-500');
+            toast.classList.add(borderClass);
+
+            // Trigger Animation (Show)
+            toast.classList.remove('translate-y-24', 'opacity-0', 'pointer-events-none');
+            toast.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+
+            // Auto Vanish after 1.5 seconds
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(hideNotification, 1500); 
+        }
+
+        function hideNotification() {
+            const toast = document.getElementById('toast');
+            // Trigger Animation (Hide)
+            toast.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+            toast.classList.add('translate-y-24', 'opacity-0', 'pointer-events-none');
+        }
+
+        // --- Tab Switching Logic ---
+        function switchTab(tabName) {
+            // Update UI State
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`nav-${tabName}`).classList.add('active');
+
+            const homeContainer = document.getElementById('main-container');
+            const infoBar = document.getElementById('info-bar');
+            const examsPage = document.getElementById('exams-page');
+            const statsPage = document.getElementById('stats-page');
+
+            // Hide all
+            homeContainer.style.display = 'none';
+            infoBar.style.display = 'none';
+            examsPage.style.display = 'none';
+            statsPage.style.display = 'none';
+
+            if (tabName === 'home') {
+                homeContainer.style.display = 'flex';
+                infoBar.style.display = 'flex';
+            } else if (tabName === 'exams') {
+                examsPage.style.display = 'flex';
+                renderHistory(); // Render from local state
+            } else if (tabName === 'stats') {
+                statsPage.style.display = 'flex';
+                renderStats(); // Render from local state
+            }
+        }
+
+        // --- Settings Modal Logic ---
+        function openSettings() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+            document.body.classList.add('modal-active');
+        }
+
+        function closeSettings() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                document.body.classList.remove('modal-active');
+            }, 250);
+        }
+
+        function saveSettings() {
+            const url = document.getElementById('gscript-url').value;
+            const sheet = document.getElementById('gsheet-name').value;
+            
+            state.gScriptUrl = url;
+            state.gSheetName = sheet;
+            
+            localStorage.setItem('omr_gscript_url', url);
+            localStorage.setItem('omr_gsheet_name', sheet);
+            
+            closeSettings();
+            showNotification('Success', 'Settings saved successfully!', 'success');
+        }
+
+        // --- Submit & Auto-Save Handler ---
+        function handleSubmit() {
+            // 1. Calculate Score
+            const calculationSuccess = calculateScore();
+            if (!calculationSuccess) return;
+
+            // 2. Check if already saved
+            if (state.isSaved) {
+                showNotification('Notice', 'This exam result has already been saved. Reset to start new.', 'info');
+                return;
+            }
+
+            // 3. Save Data (Local + Cloud)
+            saveExamData();
+            
+            // 4. Mark as saved
+            state.isSaved = true;
+            
+            // Optional: visual feedback on button
+            const btn = document.getElementById('submit-btn');
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+
+        // --- Unified Save Logic (Local + Cloud) ---
+        function saveExamData() {
+            // Validate Score Calculation (Just in case called directly)
+            const scoreRight = document.getElementById('score-right').value;
+            if(scoreRight === '-') return; // Should not happen via handleSubmit
+
+            // Gather Data
+            const total = parseFloat(document.getElementById('score-obtained').value);
+            const totalQs = state.totalQuestions;
+            let percentage = (total / totalQs) * 100;
+            
+            // Remarks Logic
+            let remarks = "Fail";
+            if (percentage >= 70) remarks = "On right track";
+            else if (percentage >= 60) remarks = "Read more";
+            else if (percentage >= 50) remarks = "Need Improvement";
+
+            const examRecord = {
+                date: document.getElementById('current-date').textContent,
+                subject: document.getElementById('subject-select').value || "Unknown Subject",
+                topic: document.getElementById('topic-input').value || "Unknown Topic",
+                duration: formatTime(state.timeElapsed), // Use calculated elapsed time
+                total_questions: totalQs,
+                right_answers: scoreRight,
+                wrong_answers: document.getElementById('score-wrong').value,
+                obtained_marks: document.getElementById('score-obtained').value,
+                remarks: remarks,
+                timestamp: new Date().toISOString()
+            };
+
+            // 1. Save Locally
+            state.examHistory.push(examRecord);
+            localStorage.setItem('omr_exam_history', JSON.stringify(state.examHistory));
+
+            // 2. Save to Cloud (if configured)
+            if(state.gScriptUrl) {
+                const btn = document.getElementById('submit-btn');
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+                
+                fetch(state.gScriptUrl, {
+                    method: 'POST',
+                    mode: 'no-cors', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(examRecord)
+                })
+                .then(() => {
+                    showNotification('Saved Successfully', 'Result saved to Local History & Google Sheet!', 'success');
+                })
+                .catch(err => {
+                    console.error(err);
+                    showNotification('Warning', 'Saved Locally only. Cloud upload failed.', 'error');
+                })
+                .finally(() => {
+                    btn.innerHTML = originalHtml;
+                });
+            } else {
+                showNotification('Saved Locally', 'Configure Google Sheet in settings for cloud backup.', 'success');
+            }
+        }
+
+        // --- History Rendering Logic ---
+        function renderHistory() {
+            const tbody = document.getElementById('history-table-body');
+            const filterSubject = document.getElementById('history-subject-filter').value;
+            const emptyState = document.getElementById('history-empty');
+
+            tbody.innerHTML = '';
+            
+            let data = state.examHistory;
+
+            // Filter
+            if (filterSubject !== 'All') {
+                data = data.filter(item => item.subject === filterSubject);
+            }
+
+            if (data.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            // Sort by newest first
+            data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-slate-700/50 hover:bg-slate-700/30 transition';
+                
+                // Colorize Remarks
+                let remarkColor = 'text-rose-400';
+                if(item.remarks === 'On right track') remarkColor = 'text-emerald-400 font-bold';
+                else if(item.remarks === 'Read more') remarkColor = 'text-yellow-400';
+                else if(item.remarks === 'Need Improvement') remarkColor = 'text-orange-400';
+
+                row.innerHTML = `
+                    <td class="font-mono text-xs text-slate-400">${item.date}</td>
+                    <td class="font-medium text-white">${item.subject}</td>
+                    <td class="text-xs text-cyan-200">${item.topic}</td>
+                    <td class="font-mono text-xs">${item.duration}</td>
+                    <td class="text-center">${item.total_questions}</td>
+                    <td class="font-bold text-white">${item.obtained_marks}</td>
+                    <td class="${remarkColor} text-xs uppercase tracking-wide">${item.remarks}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function exportHistoryToExcel() {
+            // Get currently filtered data
+            const filterSubject = document.getElementById('history-subject-filter').value;
+            let data = state.examHistory;
+            if (filterSubject !== 'All') {
+                data = data.filter(item => item.subject === filterSubject);
+            }
+
+            if (data.length === 0) {
+                showNotification('Export Failed', 'No history data to export.', 'error');
+                return;
+            }
+
+            const exportData = data.map(item => ({
+                Date: item.date,
+                Subject: item.subject,
+                Topic: item.topic,
+                Duration: item.duration,
+                'Total Qs': item.total_questions,
+                'Right': item.right_answers,
+                'Wrong': item.wrong_answers,
+                'Marks': item.obtained_marks,
+                'Remarks': item.remarks
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Exam History");
+            XLSX.writeFile(wb, `Exam_History_${filterSubject === 'All' ? 'All' : filterSubject}.xlsx`);
+        }
+
+        // --- STATS Rendering Logic ---
+        function renderStats() {
+            // Check if charts exist and destroy them before re-rendering
+            if(state.charts.overall) state.charts.overall.destroy();
+            if(state.charts.subject) state.charts.subject.destroy();
+
+            const data = [...state.examHistory].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)); // Oldest first for chart
+
+            // --- CALCULATE OVERALL STATISTICS ---
+            let totalQs = 0;
+            let totalRight = 0;
+            let totalWrong = 0;
+            let totalScore = 0;
+            let sumPercentages = 0;
+            let globalAvgPct = 0; // Initialize outside block
+
+            if (data.length > 0) {
+                data.forEach(d => {
+                    const q = parseInt(d.total_questions) || 1;
+                    const m = parseFloat(d.obtained_marks) || 0;
+                    totalQs += q;
+                    totalRight += parseInt(d.right_answers) || 0;
+                    totalWrong += parseInt(d.wrong_answers) || 0;
+                    totalScore += m;
+                    sumPercentages += (m / q) * 100;
+                });
+
+                const attempted = totalRight + totalWrong;
+                globalAvgPct = (sumPercentages / data.length).toFixed(2); // Assign to outer variable
+
+                document.getElementById('ov-stat-total-qs').textContent = totalQs;
+                document.getElementById('ov-stat-attempted').textContent = attempted;
+                document.getElementById('ov-stat-right').textContent = totalRight;
+                document.getElementById('ov-stat-wrong').textContent = totalWrong;
+                document.getElementById('ov-stat-total-exam').textContent = data.length;
+                document.getElementById('ov-stat-avg-score').textContent = globalAvgPct + '%';
+            } else {
+                 // Zero out
+                document.getElementById('ov-stat-total-qs').textContent = '0';
+                document.getElementById('ov-stat-attempted').textContent = '0';
+                document.getElementById('ov-stat-right').textContent = '0';
+                document.getElementById('ov-stat-wrong').textContent = '0';
+                document.getElementById('ov-stat-total-exam').textContent = '0';
+                document.getElementById('ov-stat-avg-score').textContent = '0%';
+            }
+
+            // 1. Overall Chart Data
+            const labels = data.map(item => item.date);
+            const overallScores = data.map(item => (parseFloat(item.obtained_marks) / parseInt(item.total_questions)) * 100);
+            
+            // Create array for horizontal line
+            const globalAvgLine = new Array(overallScores.length).fill(globalAvgPct);
+
+            // Chart Configuration Context
+            const ctxOverall = document.getElementById('chart-overall').getContext('2d');
+            state.charts.overall = new Chart(ctxOverall, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Overall %',
+                            data: overallScores,
+                            borderColor: '#22d3ee', // Cyan 400
+                            backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointBackgroundColor: '#0f172a',
+                            pointBorderColor: '#22d3ee',
+                            fill: true
+                        },
+                        {
+                            label: `Global Avg (${globalAvgPct}%)`,
+                            data: globalAvgLine,
+                            borderColor: '#c084fc', // Purple 400
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, max: 100, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                    },
+                    plugins: { legend: { labels: { color: '#e2e8f0' } } }
+                }
+            });
+
+            // 2. Initial Subject Chart Render
+            updateSubjectChart();
+        }
+
+        function updateSubjectChart() {
+            const filterSubject = document.getElementById('stats-subject-filter').value;
+            // 1. Calculate Global Average % from ALL data first
+            const allData = [...state.examHistory];
+            let globalSumPct = 0;
+            allData.forEach(d => {
+                const m = parseFloat(d.obtained_marks);
+                const q = parseInt(d.total_questions) || 1;
+                globalSumPct += (m / q) * 100;
+            });
+            const globalAvgPct = allData.length > 0 ? (globalSumPct / allData.length).toFixed(2) : 0;
+
+            // 2. Prepare Subject Data
+            let data = [...state.examHistory].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            // Destroy previous chart instance if exists
+            if(state.charts.subject) state.charts.subject.destroy();
+
+            // Filter data based on selected subject
+            if (filterSubject) {
+                data = data.filter(d => d.subject === filterSubject);
+            } else {
+                // Reset stats if no subject selected
+                ['stat-total-qs','stat-attempted','stat-right','stat-wrong','stat-total-exam','stat-avg-score','stat-high-score','stat-last-attempt'].forEach(id => {
+                    document.getElementById(id).textContent = '-';
+                });
+                return; 
+            }
+
+            // --- CALCULATE STATISTICS ---
+            let totalQs = 0;
+            let totalRight = 0;
+            let totalWrong = 0;
+            let totalScore = 0;
+            let maxScore = -Infinity;
+            let subjectSumPct = 0;
+            
+            if (data.length > 0) {
+                data.forEach(d => {
+                    const marks = parseFloat(d.obtained_marks);
+                    const q = parseInt(d.total_questions) || 1;
+                    const r = parseInt(d.right_answers) || 0;
+                    const w = parseInt(d.wrong_answers) || 0;
+                    
+                    totalQs += q;
+                    totalRight += r;
+                    totalWrong += w;
+                    totalScore += marks;
+                    subjectSumPct += (marks / q) * 100;
+                    if(marks > maxScore) maxScore = marks;
+                });
+
+                const attempted = totalRight + totalWrong;
+                const avgScore = (totalScore / data.length).toFixed(2); // Avg marks (absolute)
+                const subjectAvgPct = (subjectSumPct / data.length).toFixed(2); // Avg percentage for chart
+                const lastAttemptScore = data[data.length - 1].obtained_marks;
+
+                // Update DOM
+                document.getElementById('stat-total-qs').textContent = totalQs;
+                document.getElementById('stat-attempted').textContent = attempted;
+                document.getElementById('stat-right').textContent = totalRight;
+                document.getElementById('stat-wrong').textContent = totalWrong;
+                document.getElementById('stat-total-exam').textContent = data.length;
+                document.getElementById('stat-avg-score').textContent = avgScore;
+                document.getElementById('stat-high-score').textContent = maxScore;
+                document.getElementById('stat-last-attempt').textContent = lastAttemptScore;
+
+                // --- RENDER CHART ---
+                const scores = data.map(d => (parseFloat(d.obtained_marks) / parseInt(d.total_questions)) * 100);
+                const labels = data.map((_, i) => `Exam ${i+1}`);
+
+                // Create arrays for horizontal lines
+                const subjectAvgLine = new Array(scores.length).fill(subjectAvgPct);
+                const globalAvgLine = new Array(scores.length).fill(globalAvgPct);
+
+                const ctxSubject = document.getElementById('chart-subject').getContext('2d');
+                
+                state.charts.subject = new Chart(ctxSubject, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Score %',
+                                data: scores,
+                                borderColor: '#10b981', // Emerald 500
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                borderWidth: 2,
+                                tension: 0.3,
+                                pointBackgroundColor: '#0f172a',
+                                pointBorderColor: '#10b981',
+                                fill: true
+                            },
+                            {
+                                label: `Subj Avg (${subjectAvgPct}%)`,
+                                data: subjectAvgLine,
+                                borderColor: '#facc15', // Yellow 400
+                                borderWidth: 2,
+                                borderDash: [5, 5],
+                                pointRadius: 0,
+                                fill: false
+                            },
+                            {
+                                label: `Global Avg (${globalAvgPct}%)`,
+                                data: globalAvgLine,
+                                borderColor: '#c084fc', // Purple 400
+                                borderWidth: 2,
+                                borderDash: [2, 2],
+                                pointRadius: 0,
+                                fill: false
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { beginAtZero: true, max: 100, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                        },
+                        plugins: { legend: { labels: { color: '#e2e8f0' } } }
+                    }
+                });
+            } else {
+                // Zero out if subject selected but no history
+                ['stat-total-qs','stat-attempted','stat-right','stat-wrong','stat-total-exam','stat-avg-score','stat-high-score'].forEach(id => document.getElementById(id).textContent = '0');
+                document.getElementById('stat-last-attempt').textContent = '-';
+            }
+        }
+
+        // --- Mode Display Logic ---
+        function updateModeDisplay() {
+            // Remove existing classes
+            modeBadge.classList.remove(
+                'bg-cyan-900', 'text-cyan-300', 'border-cyan-700', 'mode-no-glow',
+                'bg-red-900', 'text-red-300', 'border-red-700', 'mode-glow-red',
+                'bg-yellow-900', 'text-yellow-300', 'border-yellow-700', 'mode-glow-yellow'
+            );
+
+            if (state.isKeyMode) {
+                // Teacher Mode
+                modeBadge.textContent = 'Mode: Teacher';
+                modeBadge.classList.add('bg-yellow-900', 'text-yellow-300', 'border-yellow-700', 'mode-glow-yellow');
+            } else if (state.isTimerRunning) {
+                // Exam Mode
+                modeBadge.textContent = 'Mode: Exam';
+                modeBadge.classList.add('bg-red-900', 'text-red-300', 'border-red-700', 'mode-glow-red');
+            } else {
+                // Student Mode (Default)
+                modeBadge.textContent = 'Mode: Student';
+                modeBadge.classList.add('bg-cyan-900', 'text-cyan-300', 'border-cyan-700', 'mode-no-glow');
+            }
+        }
+
+        // --- Grid Generation ---
+        function generateGrid() {
+            const count = parseInt(qCountInput.value) || 80;
+            state.totalQuestions = count;
+            gridContainer.innerHTML = '';
+
+            for (let i = 1; i <= count; i++) {
+                const row = document.createElement('div');
+                row.className = 'omr-grid transition cursor-default';
+                
+                // Question Number
+                const qNum = document.createElement('div');
+                qNum.className = 'q-num font-mono';
+                qNum.textContent = i;
+                row.appendChild(qNum);
+
+                // Bubbles
+                state.options.forEach((opt, idx) => {
+                    const bubble = document.createElement('div');
+                    bubble.className = 'bubble';
+                    bubble.textContent = opt;
+                    bubble.dataset.q = i;
+                    bubble.dataset.opt = idx;
+                    bubble.onclick = () => handleBubbleClick(i, idx, bubble);
+                    row.appendChild(bubble);
+                });
+
+                gridContainer.appendChild(row);
+            }
+            restoreVisuals();
+        }
+
+        // --- Interaction Logic ---
+        function handleBubbleClick(qNum, optIdx, bubbleEl) {
+            // LOCK CHECK: If Timer is NOT running AND Key Mode is NOT active, block interaction
+            if (!state.isTimerRunning && !state.isKeyMode) {
+                showNotification('Locked', 'Please start the timer to begin the exam.', 'info');
+                return;
+            }
+
+            const parent = bubbleEl.parentElement;
+            const bubbles = parent.querySelectorAll('.bubble');
+
+            if (state.isKeyMode) {
+                // Setting the Answer Key (Teacher mode allows corrections)
+                if (state.answerKey[qNum] === optIdx) {
+                    delete state.answerKey[qNum];
+                    bubbleEl.classList.remove('key-filled');
+                } else {
+                    state.answerKey[qNum] = optIdx;
+                    bubbles.forEach(b => b.classList.remove('key-filled'));
+                    bubbleEl.classList.add('key-filled');
+                }
+            } else {
+                // Answering as User (Strict OMR Mode)
+                
+                // If an answer is already recorded for this question, prevent changes
+                if (state.userAnswers[qNum] !== undefined) {
+                    // Optional: Show a subtle warning
+                    // showNotification('Locked', 'You cannot change your answer in OMR mode.', 'error');
+                    return;
+                }
+
+                // If not answered yet, lock in the selection
+                state.userAnswers[qNum] = optIdx;
+                bubbleEl.classList.add('filled');
+            }
+        }
+
+        function restoreVisuals() {
+            document.querySelectorAll('.bubble').forEach(b => {
+                const q = b.dataset.q;
+                const opt = parseInt(b.dataset.opt);
+                
+                // Clear validation classes
+                b.classList.remove('filled', 'key-filled', 'correct', 'wrong');
+                b.style.boxShadow = '';
+                b.style.backgroundColor = ''; // Reset inline background styles
+
+                // Apply Key Visuals
+                if (state.isKeyMode && state.answerKey[q] === opt) {
+                    b.classList.add('key-filled');
+                }
+                
+                // Apply User Visuals
+                if (!state.isKeyMode && state.userAnswers[q] === opt) {
+                    b.classList.add('filled');
+                }
+            });
+        }
+
+        // --- Key Mode Toggle ---
+        function setupKeyMode() {
+            keyModeToggle.addEventListener('change', (e) => {
+                state.isKeyMode = e.target.checked;
+                const panel = document.getElementById('omr-panel');
+                
+                if(state.isKeyMode) {
+                    panel.classList.add('ring-2', 'ring-amber-500', 'ring-inset');
+                } else {
+                    panel.classList.remove('ring-2', 'ring-amber-500', 'ring-inset');
+                }
+
+                restoreVisuals();
+                updateModeDisplay(); // Update mode on toggle
+            });
+        }
+
+        // --- Scoring Engine ---
+        window.calculateScore = function() {
+            if (Object.keys(state.answerKey).length === 0) {
+                showNotification('Action Required', 'Please set an Answer Key first! Enable \'Key\' mode.', 'info');
+                return false;
+            }
+
+            let correct = 0;
+            let wrong = 0;
+            const negRate = parseFloat(document.getElementById('neg-mark').value);
+
+            // Reset visuals first
+            document.querySelectorAll('.bubble').forEach(b => {
+                b.classList.remove('correct', 'wrong');
+                b.style.boxShadow = '';
+            });
+
+            for (let q = 1; q <= state.totalQuestions; q++) {
+                const userAns = state.userAnswers[q];
+                const keyAns = state.answerKey[q];
+
+                // Skip unattempted
+                if (userAns === undefined) continue;
+
+                const row = gridContainer.children[q-1];
+                const bubbles = row.querySelectorAll('.bubble');
+
+                if (userAns === keyAns) {
+                    correct++;
+                    bubbles[userAns].classList.add('correct');
+                } else {
+                    wrong++;
+                    bubbles[userAns].classList.add('wrong');
+                    // Outline correct answer hint
+                    if (keyAns !== undefined) {
+                        bubbles[keyAns].style.boxShadow = "0 0 0 2px #10b981"; 
+                    }
+                }
+            }
+
+            const negScore = wrong * negRate;
+            const totalScore = correct - negScore;
+
+            // Update UI
+            document.getElementById('score-right').value = correct;
+            document.getElementById('score-wrong').value = wrong;
+            document.getElementById('score-neg').value = negScore.toFixed(2);
+            document.getElementById('score-obtained').value = totalScore.toFixed(2);
+
+            // Update Remarks
+            const percentage = (totalScore / state.totalQuestions) * 100;
+            const remarksEl = document.getElementById('score-remarks');
+            
+            // Reset base classes
+            remarksEl.className = "w-full bg-transparent text-center font-bold text-[10px] border-none focus:ring-0 p-0 leading-tight";
+
+            if (percentage >= 70) {
+                remarksEl.value = "On right track";
+                remarksEl.classList.add("text-emerald-400");
+            } else if (percentage >= 60) {
+                remarksEl.value = "Read more";
+                remarksEl.classList.add("text-yellow-400"); // Yellow/Orange for Read More
+            } else if (percentage >= 50) {
+                remarksEl.value = "Need Improvement";
+                remarksEl.classList.add("text-orange-400");
+            } else {
+                remarksEl.value = "Fail";
+                remarksEl.classList.add("text-rose-500");
+            }
+            
+            return true;
+        };
+
+        // --- Resizer Logic ---
+        function setupResizer() {
+            const resizer = document.getElementById('resizer');
+            const leftPanel = document.getElementById('omr-panel');
+            const rightPanel = document.getElementById('pdf-wrapper');
+            let x = 0, w = 0;
+            
+            resizer.addEventListener('mousedown', e => { 
+                x = e.clientX; 
+                w = leftPanel.getBoundingClientRect().width; 
+                document.addEventListener('mousemove', onMove); 
+                document.addEventListener('mouseup', onUp); 
+                // Disable pointer events on iframe to prevent capturing mouse
+                if(document.getElementById('pdf-frame')) document.getElementById('pdf-frame').style.pointerEvents = 'none';
+            });
+            
+            function onMove(e) { 
+                const containerW = resizer.parentElement.offsetWidth;
+                const newW = ((w + (e.clientX - x)) / containerW) * 100;
+                if(newW > 20 && newW < 80) {
+                    leftPanel.style.width = `${newW}%`; 
+                }
+            }
+
+            function onUp() { 
+                document.removeEventListener('mousemove', onMove); 
+                document.removeEventListener('mouseup', onUp);
+                if(document.getElementById('pdf-frame')) document.getElementById('pdf-frame').style.pointerEvents = 'auto';
+            }
+        }
+
+        // --- Utility Functions ---
+        window.resetSheet = function() {
+            if(!confirm("Clear all user answers and reset timer?")) return;
+            
+            state.userAnswers = {};
+            state.isSaved = false; // Reset saved state
+            
+            resetTimer();
+            
+            // Clear result inputs
+            ['score-right','score-wrong','score-neg','score-obtained'].forEach(id => document.getElementById(id).value = '-');
+            
+            // Clear remarks
+            const rem = document.getElementById('score-remarks');
+            rem.value = '-';
+            rem.className = "w-full bg-transparent text-center font-bold text-[10px] text-slate-400 border-none focus:ring-0 p-0 leading-tight";
+
+            // Enable submit button style
+            const btn = document.getElementById('submit-btn');
+            if(btn) btn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+            // Re-render
+            restoreVisuals();
+            updateModeDisplay(); // Ensure mode resets if needed
+        };
+
+        function formatTime(totalSeconds) {
+            const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+            const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+            const s = (totalSeconds % 60).toString().padStart(2, '0');
+            return `${h}:${m}:${s}`;
+        }
+
+        function adjustTime(amount) {
+            const input = document.getElementById('timer-input');
+            if (input.disabled) return;
+            
+            let val = parseInt(input.value);
+            if (isNaN(val)) val = 0; // Start at 0 if empty
+            
+            val += amount;
+            
+            // Constraints
+            if (val < 1) val = 1;
+            if (val > 180) val = 180; // Max 3 hours
+            
+            input.value = val;
+        }
+
+        function toggleTimer() {
+            const btn = document.getElementById('timer-btn');
+            const icon = btn.querySelector('i');
+            const input = document.getElementById('timer-input');
+            const keyToggle = document.getElementById('key-mode-toggle');
+            const keyLabel = document.getElementById('key-mode-label');
+            const resetBtn = document.getElementById('reset-btn');
+            
+            if (state.isTimerRunning) {
+                // Pause Logic
+                clearInterval(state.timerInterval);
+                state.isTimerRunning = false;
+                
+                // UI Updates
+                btn.classList.replace('bg-rose-600', 'bg-cyan-700');
+                btn.classList.remove('border-rose-500');
+                btn.classList.add('border-cyan-600');
+                icon.className = 'fa-solid fa-play text-xs pl-0.5';
+                input.disabled = false;
+
+                // Unlock Controls
+                keyToggle.disabled = false;
+                resetBtn.disabled = false;
+                keyLabel.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                // Start Logic
+                
+                // Prevent start if Key Mode is on
+                if (state.isKeyMode) {
+                    showNotification('Mode Conflict', 'Please disable Key Mode before starting the exam.', 'error');
+                    return;
+                }
+
+                const mins = parseInt(input.value);
+                
+                state.timeElapsed = 0; // Start fresh
+
+                // If initializing (at 0) and input exists, set up Countdown
+                if (state.seconds === 0 && !isNaN(mins) && mins > 0) {
+                    state.isCountdown = true;
+                    state.seconds = mins * 60;
+                    updateTimerDisplay(); // Update immediately
+                } else if (state.seconds === 0) {
+                    // Else start fresh count up
+                    state.isCountdown = false;
+                }
+
+                state.isTimerRunning = true;
+                input.disabled = true;
+
+                // Lock Controls
+                keyToggle.disabled = true;
+                resetBtn.disabled = true;
+                keyLabel.classList.add('opacity-50', 'cursor-not-allowed');
+
+                state.timerInterval = setInterval(() => {
+                    // Always track elapsed time
+                    state.timeElapsed++;
+
+                    if (state.isCountdown) {
+                        state.seconds--;
+                        if (state.seconds <= 0) {
+                            clearInterval(state.timerInterval);
+                            state.isTimerRunning = false;
+                            state.seconds = 0;
+                            updateTimerDisplay();
+                            alert("Time's Up!");
+                            // Reset UI to paused state
+                            btn.classList.replace('bg-rose-600', 'bg-cyan-700');
+                            btn.classList.remove('border-rose-500');
+                            btn.classList.add('border-cyan-600');
+                            icon.className = 'fa-solid fa-play text-xs pl-0.5';
+                            input.disabled = false;
+                            
+                            // Unlock Controls on Time Up
+                            keyToggle.disabled = false;
+                            resetBtn.disabled = false;
+                            keyLabel.classList.remove('opacity-50', 'cursor-not-allowed');
+                            
+                            updateModeDisplay();
+                            return;
+                        }
+                    } else {
+                        state.seconds++;
+                    }
+                    updateTimerDisplay();
+                }, 1000);
+
+                // UI Updates (Switch to Stop State)
+                btn.classList.replace('bg-cyan-700', 'bg-rose-600');
+                btn.classList.remove('border-cyan-600');
+                btn.classList.add('border-rose-500');
+                icon.className = 'fa-solid fa-stop text-xs';
+            }
+            updateModeDisplay(); 
+        }
+
+        function resetTimer() {
+            clearInterval(state.timerInterval);
+            state.isTimerRunning = false;
+            state.seconds = 0;
+            state.timeElapsed = 0; // Reset elapsed
+            state.isCountdown = false;
+            updateTimerDisplay();
+            
+            const btn = document.getElementById('timer-btn');
+            const icon = btn.querySelector('i');
+            const input = document.getElementById('timer-input');
+            const keyToggle = document.getElementById('key-mode-toggle');
+            const keyLabel = document.getElementById('key-mode-label');
+            const resetBtn = document.getElementById('reset-btn');
+
+            // Reset UI
+            if (btn.classList.contains('bg-rose-600')) {
+                btn.classList.replace('bg-rose-600', 'bg-cyan-700');
+                btn.classList.remove('border-rose-500');
+                btn.classList.add('border-cyan-600');
+            } else if (btn.classList.contains('bg-amber-600')) { // Legacy check
+                btn.classList.replace('bg-amber-600', 'bg-cyan-700');
+                btn.classList.remove('border-amber-400');
+                btn.classList.add('border-cyan-600');
+            }
+            
+            icon.className = 'fa-solid fa-play text-xs pl-0.5';
+            
+            input.value = ''; // Clear input
+            input.disabled = false;
+            
+            // Ensure controls unlocked on reset
+            keyToggle.disabled = false;
+            resetBtn.disabled = false;
+            keyLabel.classList.remove('opacity-50', 'cursor-not-allowed');
+            
+            updateModeDisplay(); 
+        }
+
+        function updateTimerDisplay() {
+            const h = Math.floor(state.seconds / 3600).toString().padStart(2, '0');
+            const m = Math.floor((state.seconds % 3600) / 60).toString().padStart(2, '0');
+            const s = (state.seconds % 60).toString().padStart(2, '0');
+            document.getElementById('timer-display').textContent = `${h}:${m}:${s}`;
+        }
+
+        // --- PDF Loading ---
+        function loadPdf() {
+            const url = document.getElementById('pdf-url-input').value;
+            if(url) {
+                const frame = document.getElementById('pdf-frame');
+                const ph = document.getElementById('pdf-placeholder');
+                frame.src = url;
+                frame.classList.remove('hidden');
+                ph.classList.add('hidden');
+            }
+        }
+
+        function handleFileUpload(input) {
+            const file = input.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                const frame = document.getElementById('pdf-frame');
+                const ph = document.getElementById('pdf-placeholder');
+                frame.src = url;
+                frame.classList.remove('hidden');
+                ph.classList.add('hidden');
+            }
+        }
+
+        // --- Export ---
+        function exportToExcel() {
+            if (Object.keys(state.userAnswers).length === 0 && Object.keys(state.answerKey).length === 0) {
+                showNotification('Export Failed', 'No answers recorded to export.', 'error');
+                return;
+            }
+
+            const data = [];
+            for(let i=1; i<=state.totalQuestions; i++) {
+                const userChoice = state.userAnswers[i] !== undefined ? state.options[state.userAnswers[i]] : '-';
+                const keyChoice = state.answerKey[i] !== undefined ? state.options[state.answerKey[i]] : '-';
+                
+                let status = 'Unattempted';
+                if(userChoice !== '-') {
+                    if(keyChoice !== '-') {
+                        status = (userChoice === keyChoice) ? 'Correct' : 'Wrong';
+                    } else {
+                        status = 'Submitted';
+                    }
+                }
+
+                data.push({
+                    'Q.No': i,
+                    'User Answer': userChoice,
+                    'Answer Key': keyChoice,
+                    'Result': status
+                });
+            }
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "OMR Report");
+            XLSX.writeFile(wb, "OMR_Test_Result.xlsx");
+        }
+
+    </script>
+</body>
+</html>
